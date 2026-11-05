@@ -1,0 +1,2 @@
+# Keep text inputs and generated resources identical on Windows and Unix.
+* text=auto eol=lf

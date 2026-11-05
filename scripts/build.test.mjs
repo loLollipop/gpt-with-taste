@@ -64,6 +64,11 @@ test('self-review belongs to delivery and Steers stay focused on the actual resu
   assert.match(texts.agentSteer, /Distinguish progress or a mailbox wake from a completed assignment/);
 });
 
+test('author sources use LF so embedded JSON is portable across checkouts', async () => {
+  const {texts} = await loadRecipe(repo);
+  for (const [key, text] of Object.entries(texts)) assert.doesNotMatch(text, /\r/, key);
+});
+
 test('compile is deterministic and each generated file has a source manifest', async () => {
   const first = await compile(repo), second = await compile(repo, [...TARGETS].reverse());
   assert.deepEqual(first, second);

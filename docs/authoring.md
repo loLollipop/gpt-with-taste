@@ -9,6 +9,8 @@ node scripts/build.mjs --check
 
 The build runs locally. Generated files are committed, so people installing from a clone can use the existing Codex installer without building first.
 
+Text sources and generated resources use LF line endings through `.gitattributes`, so Windows builds produce the same embedded JSON text as Unix builds.
+
 ## Where to edit
 
 `recipe/manifest.json` names six complete English instruction sources:
