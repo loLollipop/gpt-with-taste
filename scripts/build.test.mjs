@@ -45,6 +45,25 @@ test('author package is complete, host-neutral and position-specific', async () 
   }
 });
 
+test('self-review belongs to delivery and Steers stay focused on the actual result', async () => {
+  const {texts} = await loadRecipe(repo);
+  for (const key of ['main', 'sub']) {
+    assert.match(texts[key], /Running is not done/);
+    assert.match(texts[key], /This self-review is part of the work, not ceremony/);
+    assert.match(texts[key], /inputs, empty or missing data, and error returns/);
+  }
+  for (const key of ['userSteer', 'subSteer', 'agentSteer']) {
+    const words = texts[key].match(/[A-Za-z]+(?:[-'][A-Za-z]+)*/g) ?? [];
+    assert.ok(words.length <= 250, `${key} should remain a short event reminder`);
+    assert.match(texts[key], /actual (?:diff or artifact|artifact)/);
+    assert.match(texts[key], /reuse valid evidence/i);
+    assert.doesNotMatch(texts[key], /ISO 24495|matrix-multiplication|footnotes|collapsed sections/);
+  }
+  assert.match(texts.userSteer, /verification proportional to the change and its consequences/);
+  assert.match(texts.subSteer, /Keep checks proportional/);
+  assert.match(texts.agentSteer, /Distinguish progress or a mailbox wake from a completed assignment/);
+});
+
 test('compile is deterministic and each generated file has a source manifest', async () => {
   const first = await compile(repo), second = await compile(repo, [...TARGETS].reverse());
   assert.deepEqual(first, second);

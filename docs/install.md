@@ -62,13 +62,15 @@ In Codex Desktop, open **Settings → Hooks** with the same `CODEX_HOME`; in the
 
 ### Runtime coverage
 
-On Codex **0.162.1**, a Linux ARM64 runtime probe delivered the startup Sub reminder but native `followup_task` did not dispatch a child `UserPromptSubmit`. Those native follow-ups therefore do not receive a fresh per-input reminder. Use the [complete Sub source in selected roles](#use-the-complete-subagent-prompt-for-a-selected-role) for standing child behavior; the installer leaves role composition to you.
+On Codex **0.162.1**, a Linux ARM64 runtime probe delivered the startup Sub reminder but native `followup_task` did not dispatch a child `UserPromptSubmit`. Those native follow-ups therefore do not receive a fresh per-input reminder. Add [short quality instructions to selected roles](role-quality.md) for standing child behavior; use the [complete Sub source](#use-the-complete-subagent-prompt-for-a-selected-role) when a role needs that full instruction set. The installer leaves role composition to you.
 
 The current `collaboration` wait returns a mailbox wake (`message: "Wait completed."`, `timed_out: false`), not a completion receipt. Its reminder asks Main to reconcile pending messages; it does not mark any child complete. Timeout, incomplete/not-found status receipts, unrelated tools and child-session results receive no Main reminder.
 
 ## Use the complete subagent prompt for a selected role
 
 `sub.md` is a complete instruction source. The plugin's `sub-steer.md` is only a reminder, and this installer does not register or replace roles.
+
+For an existing role that already has its own working instructions, prefer the [short quality additions](role-quality.md). They keep review proportional without repeating the full Sub prompt in every role.
 
 Codex's [custom-agent contract](https://developers.openai.com/codex/multi-agent) provides `developer_instructions` for a role's instructions. To use the complete Sub source in a chosen role, include it alongside that role's existing instructions, preserving its leaf, tool and permission boundaries. This role composition is separate from plugin installation and outside installer recovery.
 

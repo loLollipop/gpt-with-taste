@@ -25,6 +25,8 @@
 
 ---
 
+本仓库基于 [NB-Corp/gpt-with-taste](https://github.com/NB-Corp/gpt-with-taste) 定制：详细文风要求保留在 Main，Steer 聚焦任务理解、质量判断、自审和完成。自审属于交付本身，检查与实际改动相称。自定义 Codex 子代理可接入[简短的角色质量要求](docs/role-quality.md)，安装器不会替换现有角色。下方对照案例来自上游。
+
 <a id="harnesses"></a>
 
 ## 宿主适配
@@ -51,7 +53,7 @@ GPT with Taste 由单一行为配方源编译生成，为各支持宿主提供�
 先安装 Node.js 22 或更高版本，然后运行：
 
 ```sh
-git clone https://github.com/NB-Corp/gpt-with-taste.git
+git clone https://github.com/loLollipop/gpt-with-taste.git
 cd gpt-with-taste
 node scripts/install.mjs --hooks
 ```

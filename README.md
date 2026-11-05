@@ -24,6 +24,8 @@
 
 ---
 
+This fork of [NB-Corp/gpt-with-taste](https://github.com/NB-Corp/gpt-with-taste) keeps detailed writing guidance in Main and focuses Steer on task understanding, quality judgment, self-review, and completion. Self-review is part of delivery, with checks proportional to the actual change. For custom Codex agents, use the [short role quality instructions](docs/role-quality.md); the installer leaves existing roles intact. The comparison cases below come from upstream.
+
 <a id="harnesses"></a>
 
 ## Harnesses
@@ -50,7 +52,7 @@ Running in another host? See [docs/harnesses/porting.md](docs/harnesses/porting.
 With Node.js 22 or newer installed:
 
 ```sh
-git clone https://github.com/NB-Corp/gpt-with-taste.git
+git clone https://github.com/loLollipop/gpt-with-taste.git
 cd gpt-with-taste
 node scripts/install.mjs --hooks
 ```

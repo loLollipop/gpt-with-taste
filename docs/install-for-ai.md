@@ -35,7 +35,7 @@ Supply `--codex "/absolute/path/to/codex"` when it is not on PATH. The installer
 
 The three routes are user input to Main, child startup/dispatched child input, and supported local `wait_agent` results to Main. A matching paired startup input is suppressed once; retained child identity routes later events even without `agent_id`. The shared finite matcher accepts bare, dotted and flattened `multi_agent_v1` / `collaboration` names. Current collaboration waits return a mailbox wake, not proof of completion. Original tasks and results remain intact.
 
-In the Codex 0.162.1 runtime probe, native `followup_task` did not dispatch a child `UserPromptSubmit`. Do not report per-input reminder coverage for that path. Use the complete Sub source in selected roles for standing child instructions, preserving their existing contracts; see [runtime coverage](install.md#runtime-coverage).
+In the Codex 0.162.1 runtime probe, native `followup_task` did not dispatch a child `UserPromptSubmit`. Do not report per-input reminder coverage for that path. If the user requests standing child quality instructions, add the [short role-specific instructions](role-quality.md) to the selected roles, preserving their existing contracts; see [runtime coverage](install.md#runtime-coverage).
 
 For manual approval, use Codex Desktop's **Settings → Hooks** with the same `CODEX_HOME`, or `/hooks` in the interactive terminal. Review this plugin's `UserPromptSubmit`, `SubagentStart` and `PostToolUse` definitions pointing to `hooks/steer.mjs`; a changed definition needs approval again.
 
@@ -46,6 +46,8 @@ Receipt-owned legacy Hook groups are migrated by exact command and event; other 
 ## A selected role needs its own Sub instructions
 
 The plugin's sub reminder is not the complete Sub prompt. Do not rely on a role-level `model_instructions_file` on the tested resumed CLI workflow: the role's developer instructions loaded, but its Sub file did not replace inherited Main base instructions.
+
+For existing roles, prefer the [short quality additions](role-quality.md) inside their existing `developer_instructions`. Keep the role's model, effort, permissions, delegation limits, and reporting contract. Do not inject the full Sub prompt into every role or describe the short addition as complete Sub coverage. Role edits require the user's authorization and their own backup; the installer does not manage them.
 
 If the user requests complete Sub for a chosen role, use Codex's supported custom-role `developer_instructions` channel to include `prompts/sub.md` alongside that role's existing contract. Preserve registration, model, effort, leaf, tool and permission boundaries; do not overwrite all roles. This role composition is separate from plugin installation and outside its recovery receipt. Verify the selected child's effective instructions before reporting Sub coverage. See [role setup](install.md#use-the-complete-subagent-prompt-for-a-selected-role).
 

@@ -7,12 +7,12 @@ Requires **Pi 1.2.0+** (`@earendil-works/pi-coding-agent`) and **Node.js 22.19+*
 ## Install
 
 ```sh
-pi install git:github.com/NB-Corp/gpt-with-taste
+pi install git:github.com/loLollipop/gpt-with-taste
 ```
 
 Pi loads the generated adapter through the repository's root `pi.extensions` entry. Run `/reload` in an existing session after installation, then `/taste status` to see the role, selected-model scope decision, steering state and resource location. The status command does not call a model.
 
-Run `pi update --extensions` when you want the latest committed adapter. Remove it with `pi remove git:github.com/NB-Corp/gpt-with-taste`.
+Run `pi update --extensions` when you want the latest committed adapter. Remove it with `pi remove git:github.com/loLollipop/gpt-with-taste`.
 
 ## Try a local build
 
