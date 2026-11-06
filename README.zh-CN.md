@@ -25,7 +25,7 @@
 
 ---
 
-本仓库基于 [NB-Corp/gpt-with-taste](https://github.com/NB-Corp/gpt-with-taste) 定制：详细文风要求保留在 Main，Steer 聚焦任务理解、质量判断、自审和完成。自审属于交付本身，检查与实际改动相称。自定义 Codex 子代理可接入[简短的角色质量要求](docs/role-quality.md)，安装器不会替换现有角色。下方对照案例来自上游。
+本仓库基于 [NB-Corp/gpt-with-taste](https://github.com/NB-Corp/gpt-with-taste) 定制：Main 以追加方式接入 Codex，不再替换其 base instructions；参考实现的忠实度优先于个人审美；Steer 精简为几句提醒。自审属于交付本身，检查与实际改动相称。自定义 Codex 子代理可接入[简短的角色质量要求](docs/role-quality.md)，安装器不会替换现有角色。下方对照案例来自上游。
 
 <a id="harnesses"></a>
 
@@ -35,7 +35,7 @@ GPT with Taste 由单一行为配方源编译生成，为各支持宿主提供�
 
 | 宿主 | 接入形式 | 配置说明 |
 | --- | --- | --- |
-| **OpenAI Codex** | 原生模型指令与 hooks 叠加层 | [docs/install.md](docs/install.md)（或见下方快速安装） |
+| **OpenAI Codex** | 追加 `developer_instructions` 与 hooks 叠加层 | [docs/install.md](docs/install.md)（或见下方快速安装） |
 | **Claude Code** | Main 指令追加与原生插件（Sub + 3 路 Steer） | [docs/harnesses/claude.md](docs/harnesses/claude.md) |
 | **Kiki** | 原生 Recipe（通用包与 Sol/Astra 兼容包） | [docs/harnesses/kiki.md](docs/harnesses/kiki.md) |
 | **Pi** | 带 payload 防护的请求级扩展 | [docs/harnesses/pi.md](docs/harnesses/pi.md) |
@@ -60,7 +60,7 @@ node scripts/install.mjs --hooks
 
 推荐在 Codex Desktop 的多轮工作中安装 Hooks：用户提交、子 Agent 启动以及受支持的等待结果各自收到对应提醒。后续子 Agent 输入能否刷新提醒，取决于[客户端入口](docs/install.md#runtime-coverage)。只安装提示词则运行 `node scripts/install.mjs`。两条路线都不需要 npm 包。
 
-两条路线都安装到当前生效的 `CODEX_HOME`（未设置时为 `~/.codex`），写入两个受管提示词文件，并把 `model_instructions_file` 指向 main。你的模型、provider、effort、认证、权限、MCP、角色与 `AGENTS.md` 保持不变。要指定其他位置，追加带引号的绝对路径，例如 `--home "C:/Users/you/.codex"`。
+两条路线都安装到当前生效的 `CODEX_HOME`（未设置时为 `~/.codex`），写入两个受管提示词文件，并把 Main 写入顶层 `developer_instructions`，Codex 自带的 base instructions 保持不变。你的模型、provider、effort、认证、权限、MCP、角色与 `AGENTS.md` 保持不变。要指定其他位置，追加带引号的绝对路径，例如 `--home "C:/Users/you/.codex"`。
 
 使用 `--hooks` 时，在 Codex Desktop 的**设置 → 钩子**中审查并信任这三个定义，也可以在交互终端输入 `/hooks`。只开启你需要的事件。安装后请**新开一个 Codex 会话**。
 

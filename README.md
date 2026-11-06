@@ -24,7 +24,7 @@
 
 ---
 
-This fork of [NB-Corp/gpt-with-taste](https://github.com/NB-Corp/gpt-with-taste) keeps detailed writing guidance in Main and focuses Steer on task understanding, quality judgment, self-review, and completion. Self-review is part of delivery, with checks proportional to the actual change. For custom Codex agents, use the [short role quality instructions](docs/role-quality.md); the installer leaves existing roles intact. The comparison cases below come from upstream.
+This fork of [NB-Corp/gpt-with-taste](https://github.com/NB-Corp/gpt-with-taste) appends a lean Main to Codex instead of replacing its base instructions, puts reference fidelity before stylistic taste, and keeps Steer to a few sentences. Self-review is part of delivery, with checks proportional to the actual change. For custom Codex agents, use the [short role quality instructions](docs/role-quality.md); the installer leaves existing roles intact. The comparison cases below come from upstream.
 
 <a id="harnesses"></a>
 
@@ -34,7 +34,7 @@ GPT with Taste compiles from a single behavioral recipe into native instructions
 
 | Harness | Integration | Setup Guide |
 | --- | --- | --- |
-| **OpenAI Codex** | Native model instructions & hooks overlay | [docs/install.md](docs/install.md) (or quick start below) |
+| **OpenAI Codex** | Appended `developer_instructions` & hooks overlay | [docs/install.md](docs/install.md) (or quick start below) |
 | **Claude Code** | Main instructions append & native plugin (Sub + 3 Steer) | [docs/harnesses/claude.md](docs/harnesses/claude.md) |
 | **Kiki** | Native Recipe (general bundle & Sol/Astra compat) | [docs/harnesses/kiki.md](docs/harnesses/kiki.md) |
 | **Pi** | Request-local extension with payload guard | [docs/harnesses/pi.md](docs/harnesses/pi.md) |
@@ -59,7 +59,7 @@ node scripts/install.mjs --hooks
 
 We recommend Hooks for multi-turn work in Codex Desktop: user submissions, child startup and supported wait results receive scoped reminders. Later child-input coverage depends on the [client entry point](docs/install.md#runtime-coverage). For a prompt-only installation, run `node scripts/install.mjs` instead. Neither route needs npm packages.
 
-Both routes install into the active `CODEX_HOME` (otherwise `~/.codex`), write the two managed prompt files, and point `model_instructions_file` at the main one. Your model, provider, effort, authentication, permissions, MCP servers, roles, and `AGENTS.md` remain unchanged. To target another home, add `--home` with a quoted absolute path, for example `--home "C:/Users/you/.codex"`.
+Both routes install into the active `CODEX_HOME` (otherwise `~/.codex`), write the two managed prompt files, and add Main as top-level `developer_instructions`. Codex keeps its built-in base instructions. Your model, provider, effort, authentication, permissions, MCP servers, roles, and `AGENTS.md` remain unchanged. To target another home, add `--home` with a quoted absolute path, for example `--home "C:/Users/you/.codex"`.
 
 With `--hooks`, review and trust the three installed definitions in Codex Desktop under **Settings → Hooks**, or in the interactive terminal with `/hooks`. Enable only the events you want. Open a **new Codex session** after installation.
 
