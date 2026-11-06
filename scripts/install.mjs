@@ -3,13 +3,15 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
 import {fileURLToPath, pathToFileURL} from 'node:url';
-import {keyLine, sameInstructionLine, setInstructions, restoreInstructions} from '../src/toml-overlay.mjs';
+import {keyLine, keyBlock, sameInstructionLine, replaceBlock, developerBlock, newlineOf, INSTRUCTIONS_KEY, DEVELOPER_KEY} from '../src/toml-overlay.mjs';
 import {parseHooks, assertHook, restoreHook, receiptHooks, retireHook} from '../src/hooks-overlay.mjs';
 import {pluginBundle, codexPlugin, assertPluginInventory, MARKET_ROOT, ID} from '../src/codex-plugin.mjs';
 import {sourceIdentity, checkUpdates, formatUpdateReport} from '../src/update-check.mjs';
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const RECEIPT = '.gpt-with-taste/install-receipt.json';
 const PROMPTS = new Map([['prompts/gpt-with-taste/main.md','prompts/main.md'],['prompts/gpt-with-taste/sub.md','prompts/sub.md']]);
+// Main is appended as developer_instructions so Codex keeps its native base instructions.
+const DEVELOPER_SOURCE = 'prompts/main.md';
 const LEGACY_FILES = ['gpt-with-taste/hooks/steer.mjs',...['user','sub','agent'].map(name=>`gpt-with-taste/prompts/${name}-steer.md`)];
 const BUNDLE_PATHS = ['.agents/plugins/marketplace.json','plugins/gpt-with-taste/.codex-plugin/plugin.json','plugins/gpt-with-taste/hooks/steer.mjs','plugins/gpt-with-taste/hooks/local-tools.mjs','plugins/gpt-with-taste/hooks/hooks.json',...['user','sub','agent'].map(name=>`plugins/gpt-with-taste/prompts/${name}-steer.md`)];
 const HELP = `GPT with Taste — Node.js 22+
@@ -18,12 +20,14 @@ const HELP = `GPT with Taste — Node.js 22+
   node scripts/install.mjs --check-updates [--home ABSOLUTE_CODEX_HOME]
   node scripts/install.mjs --restore [--home ABSOLUTE_CODEX_HOME] [--dry-run]
   --codex EXECUTABLE  Codex CLI for optional plugin install/check/restore (default: codex).
-  --replace-managed  Explicitly replace conflicting managed files.
+  --replace-managed  Explicitly replace conflicting managed files or an existing developer_instructions.
   --skip-update-check  Install offline without the pre-install update check.
 Install checks public official GitHub metadata (5-second total network deadline).
 --check verifies installation integrity; --check, --restore and --help stay offline.
 --check-updates is read-only; it never fetches/pulls Git or installs an update.
 Default home: CODEX_HOME, otherwise ~/.codex. Default install: prompts only.
+Main is added as top-level developer_instructions; Codex keeps its built-in base
+instructions. A model_instructions_file set by an earlier install is restored.
 For --check-updates only, an unselected home uses this clone's saved receipt home.
 --hooks installs the local marketplace/plugin; review its commands in Codex /hooks.
 Recovery receipt: ${RECEIPT} in this clone. Keep it until you restore.
@@ -69,13 +73,15 @@ async function loadReceipt(file,home,useSavedHome=false){
     home=receipt.home;
   }
   const allowed=new Set([...PROMPTS.keys(),...LEGACY_FILES,...BUNDLE_PATHS.map(file=>`${MARKET_ROOT}/${file}`)]);
-  if(receipt.version!==1||receipt.home!==home||!['applying','applied','restoring','restored'].includes(receipt.status)||!Array.isArray(receipt.files)||receipt.files.some(entry=>!allowed.has(entry.path))||new Set(receipt.files.map(entry=>entry.path)).size!==receipt.files.length||!receipt.config||typeof receipt.config.after!=='string'||!(receipt.config.before===null||typeof receipt.config.before==='string'))fail('Receipt belongs to another home or has an unsupported format; use its original clone and home');
+  if(receipt.version!==1||receipt.home!==home||!['applying','applied','restoring','restored'].includes(receipt.status)||!Array.isArray(receipt.files)||receipt.files.some(entry=>!allowed.has(entry.path))||new Set(receipt.files.map(entry=>entry.path)).size!==receipt.files.length||!receipt.config||!(receipt.config.after===null||typeof receipt.config.after==='string')||!(receipt.config.before===null||typeof receipt.config.before==='string')||(Object.hasOwn(receipt,'developer')&&(typeof receipt.developer?.after!=='string'||!(receipt.developer.before===null||typeof receipt.developer.before==='string'))))fail('Receipt belongs to another home or has an unsupported format; use its original clone and home');
   if(receipt.plugin&&(receipt.plugin.id!==ID||receipt.plugin.root!==path.join(home,MARKET_ROOT)))fail('Unsupported plugin receipt; keep it for recovery');
   return {bytes,receipt};
 }
 async function inspect(home,receipt,recovery=false){
   const configPath=path.join(home,'config.toml'),configBytes=await read(configPath),configText=decode(configBytes),line=keyLine(configText);
-  if(!sameInstructionLine(line,receipt.config.after)&&!(recovery&&(sameInstructionLine(line,receipt.config.before)||sameInstructionLine(line,receipt.config.previous))))fail('Managed config key has drifted: model_instructions_file. Keep the receipt and reconcile this key before retrying.');
+  if(!sameInstructionLine(line,receipt.config.after)&&!(recovery&&(sameInstructionLine(line,receipt.config.before)||sameInstructionLine(line,receipt.config.previous))))fail(`Managed config key has drifted: ${INSTRUCTIONS_KEY}. Keep the receipt and reconcile this key before retrying.`);
+  const block=keyBlock(configText,DEVELOPER_KEY),dev=receipt.developer;
+  if(dev&&!sameInstructionLine(block,dev.after)&&!(recovery&&(sameInstructionLine(block,dev.before)||sameInstructionLine(block,dev.previous))))fail(`Managed config key has drifted: ${DEVELOPER_KEY}. Keep the receipt and reconcile this key before retrying.`);
   const files=[];
   for(const entry of receipt.files){
     const file=path.join(home,entry.path),bytes=await read(file);
@@ -84,7 +90,7 @@ async function inspect(home,receipt,recovery=false){
   }
   let hooks;const groups=receiptHooks(receipt);
   if(groups.length){const file=path.join(home,'hooks.json'),bytes=await read(file),value=parseHooks(bytes===null?null:decode(bytes));for(const group of groups)assertHook(value,group,recovery);hooks={file,bytes,value,groups};}
-  return {configPath,configBytes,configText,line,files,hooks};
+  return {configPath,configBytes,configText,line,block,files,hooks};
 }
 async function inspectPlugin(api,plugin,home,recovery=false){
   const state=await api.inventory();assertPluginInventory(state,plugin.root,!recovery);
@@ -98,6 +104,7 @@ async function inspectPlugin(api,plugin,home,recovery=false){
   }
   return state;
 }
+function managedConfig(text,receipt){return sameInstructionLine(keyLine(text),receipt.config.after)&&sameInstructionLine(keyBlock(text,DEVELOPER_KEY),receipt.developer.after);}
 function restoredHooks(current,active){
   if(!current.hooks)return undefined;
   for(const group of current.hooks.groups)restoreHook(current.hooks.value,group);
@@ -145,13 +152,14 @@ export async function run(args=process.argv.slice(2),root=ROOT,services={}){
     if(!active)fail('No active installation receipt in this clone');const recovery=active.status!=='applied',current=await inspect(options.home,active,recovery);
     const state=active.plugin?await inspectPlugin(api,active.plugin,options.home,recovery):null;
     const hooksAfter=restoredHooks(current,active);
-    if(options.dryRun){console.log(`Would restore managed files, model_instructions_file${active.plugin?', plugin and marketplace':''}${current.hooks?' and legacy hook baseline':''}: ${options.home}`);return;}
+    if(options.dryRun){console.log(`Would restore managed files, ${INSTRUCTIONS_KEY}${active.developer?`, ${DEVELOPER_KEY}`:''}${active.plugin?', plugin and marketplace':''}${current.hooks?' and legacy hook baseline':''}: ${options.home}`);return;}
     const pending=json({...active,status:'restoring'});await cas(receiptPath,saved.bytes,pending);
     if(state?.plugin)await api.remove();if(state?.market)await api.removeMarket();
     // Codex manages its registry through the CLI. Re-read config after its commands.
-    const latest=await read(current.configPath),text=decode(latest),line=keyLine(text);
-    if(!sameInstructionLine(line,current.line))fail('Managed config key changed during Codex removal; recovery receipt retained');
-    const restored=sameInstructionLine(line,active.config.before)?text:restoreInstructions(text,active.config.before);
+    const latest=await read(current.configPath),text=decode(latest),line=keyLine(text),block=keyBlock(text,DEVELOPER_KEY);
+    if(!sameInstructionLine(line,current.line)||!sameInstructionLine(block,current.block))fail('Managed config key changed during Codex removal; recovery receipt retained');
+    const withLine=sameInstructionLine(line,active.config.before)?text:replaceBlock(text,INSTRUCTIONS_KEY,active.config.before);
+    const restored=!active.developer||sameInstructionLine(block,active.developer.before)?withLine:replaceBlock(withLine,DEVELOPER_KEY,active.developer.before);
     await cas(current.configPath,latest,active.config.fileWasAbsent&&restored.trim()===''?null:Buffer.from(restored));
     for(const item of current.files)await cas(item.file,item.bytes,unpack(item.entry.before));
     if(current.hooks)await cas(current.hooks.file,current.hooks.bytes,hooksAfter);
@@ -164,8 +172,15 @@ export async function run(args=process.argv.slice(2),root=ROOT,services={}){
   else await updateReport(options,active,checkout,services);
   if(active)await inspect(options.home,options.hooks?active:{...active,files:active.files.filter(entry=>PROMPTS.has(entry.path)),hook:undefined,hookGroups:undefined});
   const configPath=path.join(options.home,'config.toml'),configBefore=await read(configPath),configText=decode(configBefore);
-  if(active&&!sameInstructionLine(keyLine(configText),active.config.after))fail('Managed config key changed during planning; no overwrite');
-  const configAfter=Buffer.from(setInstructions(configText,path.join(options.home,[...PROMPTS.keys()][0])));
+  const currentLine=keyLine(configText),currentBlock=keyBlock(configText,DEVELOPER_KEY);
+  if(active&&(!sameInstructionLine(currentLine,active.config.after)||(active.developer&&!sameInstructionLine(currentBlock,active.developer.after))))fail('Managed config key changed during planning; no overwrite');
+  if(!active?.developer&&currentBlock!==null&&!options.replace)fail(`Existing ${DEVELOPER_KEY} is not managed by this receipt. Review it, then use --replace-managed to preserve and replace it.`);
+  // An earlier install pointed model_instructions_file at Main; return it to its pre-install value.
+  const lineTarget=active?active.config.before:currentLine;
+  const withLine=sameInstructionLine(currentLine,lineTarget)?configText:replaceBlock(configText,INSTRUCTIONS_KEY,lineTarget);
+  const developerText=decode(await read(path.join(root,DEVELOPER_SOURCE)));if(!developerText.trim())fail(`Missing or empty bundled source: ${DEVELOPER_SOURCE}`);
+  const configAfter=Buffer.from(replaceBlock(withLine,DEVELOPER_KEY,developerBlock(developerText,newlineOf(configText))));
+  if(!active&&/gpt-with-taste/.test(currentLine??''))console.warn(`Note: ${INSTRUCTIONS_KEY} still points to a GPT with Taste Main from another clone. Restore that installation from its original clone so Codex uses its built-in base instructions.`);
   const targets=new Map();for(const [target,source]of PROMPTS){const bytes=await read(path.join(root,source));if(!bytes?.length)fail(`Missing or empty bundled source: ${source}`);targets.set(target,bytes);}
   let plugin=active?.plugin,hooks;
   if(options.hooks){
@@ -189,7 +204,7 @@ export async function run(args=process.argv.slice(2),root=ROOT,services={}){
     if(!prior&&before!==null&&!equal(before,after)&&!options.replace)fail(`Unknown managed target already exists: ${file}. Review it, then use --replace-managed to preserve and replace it.`);
     files.push({path:target,file,before,after});
   }
-  if(options.dryRun){console.log(`Would install ${options.hooks?'prompt + marketplace/plugin':'prompt-only'}: ${options.home}\nManaged config key: model_instructions_file\nManaged files: ${[...targets.keys()].join(', ')}`);return;}
+  if(options.dryRun){console.log(`Would install ${options.hooks?'prompt + marketplace/plugin':'prompt-only'}: ${options.home}\nManaged config key: ${DEVELOPER_KEY}${sameInstructionLine(currentLine,lineTarget)?'':` (${INSTRUCTIONS_KEY} restored to its pre-install value)`}\nManaged files: ${[...targets.keys()].join(', ')}`);return;}
   if(active&&(!options.hooks||active.plugin)&&equal(configBefore,configAfter)&&files.every(item=>equal(item.before,item.after))&&(!hooks||equal(hooks.before,hooks.after))){console.log(`Already installed; original recovery receipt retained: ${options.home}`);return;}
   if(options.hooks && plugin.cacheRoot){
     const prefix=`${MARKET_ROOT}/plugins/gpt-with-taste/`;
@@ -200,7 +215,8 @@ export async function run(args=process.argv.slice(2),root=ROOT,services={}){
   }
   const receipt={version:1,status:'applying',home:options.home,
     ...(active?.source?{source:active.source}:{}),
-    config:{before:active?active.config.before:keyLine(configText),after:keyLine(decode(configAfter)),previous:keyLine(configText),fileWasAbsent:active?active.config.fileWasAbsent:configBefore===null},
+    config:{before:active?active.config.before:currentLine,after:keyLine(decode(configAfter)),previous:currentLine,fileWasAbsent:active?active.config.fileWasAbsent:configBefore===null},
+    developer:{before:active?.developer?active.developer.before:currentBlock,after:keyBlock(decode(configAfter),DEVELOPER_KEY),previous:currentBlock},
     files:[...(active?.files.filter(entry=>!targets.has(entry.path))??[]),...files.map(item=>{const prior=active?.files.find(entry=>entry.path===item.path);return {path:item.path,before:prior?prior.before:encode(item.before),after:encode(item.after),previous:encode(item.before)};})],
     ...(plugin?{plugin}:{}),...(hooks?{hookGroups:hooks.records,hookState:hooks.state}:active?.hookGroups?{hookGroups:active.hookGroups,hookState:active.hookState}:active?.hook?{hook:active.hook}:{})};
   let pending=json(receipt);await cas(receiptPath,saved.bytes,pending);
@@ -213,13 +229,13 @@ export async function run(args=process.argv.slice(2),root=ROOT,services={}){
       const relative=path.relative(path.join(options.home,'plugins','cache'),result.installedPath);if(relative.startsWith('..')||path.isAbsolute(relative))fail('Codex returned a plugin cache outside selected home');
       const prefix=`${MARKET_ROOT}/plugins/gpt-with-taste/`;
       for(const item of files.filter(item=>item.path.startsWith(prefix))){const target=item.path.slice(prefix.length),bytes=await read(path.join(result.installedPath,target));if(!equal(bytes,item.after))fail(`Codex installed different plugin bytes: ${target}`);receipt.plugin.cacheFiles.push({path:target,after:encode(bytes)});}
-      if(!sameInstructionLine(keyLine(decode(await read(configPath))),receipt.config.after))fail('Managed config key changed during Codex installation');
+      if(!managedConfig(decode(await read(configPath)),receipt))fail('Managed config key changed during Codex installation');
     }
     // Attribute only verified installed bytes, never an in-flight update or untouched Hooks.
     for(const item of files)if(!equal(await read(item.file),item.after))fail(`Installed file changed: ${item.file}`);
-    if(!sameInstructionLine(keyLine(decode(await read(configPath))),receipt.config.after))fail('Managed config key changed during installation');
+    if(!managedConfig(decode(await read(configPath)),receipt))fail('Managed config key changed during installation');
     const source={...active?.source,prompts:checkout,...(options.hooks?{hooks:checkout}:{})};
-    const applied={...receipt,status:'applied',source,config:{...receipt.config},files:receipt.files.map(item=>({...item}))};delete applied.config.previous;for(const item of applied.files)delete item.previous;
+    const applied={...receipt,status:'applied',source,config:{...receipt.config},files:receipt.files.map(item=>({...item}))};delete applied.config.previous;applied.developer={...receipt.developer};delete applied.developer.previous;for(const item of applied.files)delete item.previous;
     if(applied.hookGroups)applied.hookGroups=applied.hookGroups.map(({previous,...record})=>record);
     await cas(receiptPath,pending,json(applied));
   }catch(error){throw new Error(`${error.message}\nRecovery receipt retained. Run --restore with the same --home.`);}

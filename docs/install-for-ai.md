@@ -13,9 +13,9 @@ Use this clone's normal installer with Node.js 22+. Do not substitute a loader, 
    node scripts/install.mjs --check --home "/absolute/path/to/.codex"
    ```
 
-3. Tell the user to open a new Codex session. Report the installed instruction-file path and recovery command. Keep `.gpt-with-taste/install-receipt.json` in this clone.
+3. Tell the user to open a new Codex session. Report the managed config key (`developer_instructions`) and the recovery command. Keep `.gpt-with-taste/install-receipt.json` in this clone.
 
-Default installation changes only top-level `model_instructions_file` and two managed prompt files. It preserves model, effort, provider/catalog, authentication, permissions, skills, MCP, concurrency, roles, `AGENTS.md`, existing neutral/Nia files and user Hooks. It does not require the Codex CLI. Inspect only the managed field, not the full config, which may contain credentials.
+Default installation manages only top-level `developer_instructions` and two managed prompt files; Codex keeps its built-in base instructions. A `model_instructions_file` that an earlier install from this clone pointed at Main is returned to its pre-install value. It preserves model, effort, provider/catalog, authentication, permissions, skills, MCP, concurrency, roles, `AGENTS.md`, existing neutral/Nia files and user Hooks. It does not require the Codex CLI. Inspect only the managed keys, not the full config, which may contain credentials. If an unmanaged `developer_instructions` already exists, show it to the user and obtain approval before using `--replace-managed`.
 
 For an unknown differing managed target, review it and obtain approval before using `--replace-managed`; its original bytes remain recoverable. Post-install drift requires reconciliation, not forced replacement. Use another clone for a different Codex home.
 

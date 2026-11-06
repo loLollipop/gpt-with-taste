@@ -1,10 +1,10 @@
 # Install GPT with Taste in Codex
 
-Start with the default prompt-only installation. It replaces Codex's built-in model instructions while keeping your selected model, provider and other settings. Hooks are optional.
+Start with the default prompt-only installation. It adds Main to Codex as top-level `developer_instructions`, so Codex keeps its built-in model instructions (tool use, editing, formatting) and your selected model, provider and other settings. Hooks are optional.
 
 ## Install and start a new session
 
-1. Install Node.js **22 or newer**, then open a terminal in this clone's root directory. No npm packages are needed. Codex must support `model_instructions_file`.
+1. Install Node.js **22 or newer**, then open a terminal in this clone's root directory. No npm packages are needed. Codex must support top-level `developer_instructions`.
 2. Use the absolute Codex home you already use, such as `"C:/Users/you/.codex"` on Windows. Use the same path in every command.
 3. Preview, install and check. Installation and its preview first query official update metadata, with a five-second total network limit. Add `--skip-update-check` to either install command for offline use:
 
@@ -26,7 +26,9 @@ If you omit `--home`, the installer uses `CODEX_HOME` when set, otherwise `~/.co
 | `prompts/main.md` | `prompts/gpt-with-taste/main.md` |
 | `prompts/sub.md` | `prompts/gpt-with-taste/sub.md` |
 
-The top-level `model_instructions_file` in `config.toml` points to the installed `main.md`. Its previous value remains recoverable; the file it referenced is left in place. Model, effort, provider/catalog, authentication, permissions, skills, MCP, concurrency, roles, `AGENTS.md`, existing neutral/Nia files and user Hooks stay unchanged. Prompt-only installation does not require the Codex plugin CLI.
+`config.toml` gains a top-level `developer_instructions` literal string containing `prompts/main.md`. Codex adds it as a developer message on top of its own base instructions; the installed `main.md` is a readable copy of the same text, and `sub.md` is the complete Sub source for roles. If an existing `developer_instructions` is not managed by this clone, the installer stops; review it, then use `--replace-managed` to preserve and replace it.
+
+Earlier versions pointed `model_instructions_file` at Main, which replaced Codex's base instructions. Installing this version from the same clone returns that key to its pre-install value (usually removing it). If another clone made that change, restore from that clone first; the installer prints a note when it sees one. Model, effort, provider/catalog, authentication, permissions, skills, MCP, concurrency, roles, `AGENTS.md`, existing neutral/Nia files and user Hooks stay unchanged. Prompt-only installation does not require the Codex plugin CLI.
 
 ## Add optional per-turn steering
 
@@ -74,7 +76,7 @@ For an existing role that already has its own working instructions, prefer the [
 
 Codex's [custom-agent contract](https://developers.openai.com/codex/multi-agent) provides `developer_instructions` for a role's instructions. To use the complete Sub source in a chosen role, include it alongside that role's existing instructions, preserving its leaf, tool and permission boundaries. This role composition is separate from plugin installation and outside installer recovery.
 
-Do not assume a role-level `model_instructions_file` replaces inherited Main: on the tested `exec resume` workflow, the selected role's developer instructions were delivered, but its Sub instruction-file setting was not consumed as base instructions. Check the chosen child's effective context before relying on complete Sub coverage.
+Do not assume a role-level `model_instructions_file` replaces inherited Main: on the tested `exec resume` workflow, the selected role's developer instructions were delivered, but its Sub instruction-file setting was not consumed as base instructions. Child sessions keep Codex's base instructions and may also inherit the top-level `developer_instructions`; check the chosen child's effective context before relying on complete Sub coverage.
 
 ## Update or resolve a conflict
 
