@@ -1,6 +1,6 @@
 # Prompt map
 
-The default product is the complete main prompt. One source serves the GPT model family, including GPT-6.1 Sol and GPT-6 Astra; it does not select a provider, model, or reasoning effort. The subagent prompt is also complete on its own. The three steer files are optional reminders for particular moments, not a second layer needed to recover missing capabilities.
+The main prompt is the default product. It is written to sit on top of a harness's own instructions, not to replace them: Codex keeps its built-in base instructions and receives Main as `developer_instructions`. One source serves the GPT model family; it does not select a provider, model, or reasoning effort. The subagent prompt is complete on its own. The three steer files are short optional reminders for particular moments.
 
 ## Choose the source for the reader
 
@@ -13,42 +13,39 @@ The default product is the complete main prompt. One source serves the GPT model
 | [`recipe/sub-steer.md`](../recipe/sub-steer.md) | Optional reminder with input to a delegated agent | Continue the scoped assignment, finish local work, and report only real early coordination needs. |
 | [`recipe/agent-steer.md`](../recipe/agent-steer.md) | Optional reminder when the main agent receives a collaborator message or task result | Reconcile evidence and decide before routing only the missing action-changing information. |
 
-These are the complete English author sources. [The compiler](authoring.md) generates `dist/<harness>/` and the existing Codex `prompts/` paths from them. Each adapter supplies the harness's native loading and event interfaces; the shared instructions follow the current harness rather than naming another host's tools. English source does not fix the response language: the main and subagent prompts explicitly follow the user's latest conversational language, including a switch, while project artifacts follow project conventions and explicit artifact requirements. An explicitly chosen persona overrides the default warm, lively, opinionated voice.
+These are the complete English author sources. [The compiler](authoring.md) generates `dist/<harness>/` and the existing Codex `prompts/` paths from them. Each adapter supplies the harness's native loading and event interfaces; the shared instructions follow the current harness rather than naming another host's tools. English source does not fix the response language: the main and subagent prompts explicitly follow the user's latest conversational language, including a switch, while project artifacts follow project conventions and explicit artifact requirements. An explicitly chosen persona overrides the default direct, warm voice.
 
 ## Where the capabilities live
 
 | Capability | Main prompt | Subagent prompt |
 | --- | --- | --- |
-| Full purpose, current stage, complete outcome, and few material questions | “Understand the purpose and the current assignment” | “Keep the assignment intact” |
-| Decisive judgment and taste in engineering, writing, visuals, and games | Opening; “Make taste visible in the work” | Opening; “Make a clear quality judgment” |
-| Continuous execution, reuse, diagnosis, and necessary adjacent repairs | “Take the shortest complete route” | “Reuse sound work and finish the implementation” |
-| Existing entry points, data meaning, and conditions of use | “Take the shortest complete route” | “Reuse sound work and finish the implementation” |
-| Direct work or delegation, one active owner, and actual scope limits | “Collaborate around real dependencies” | “Keep the assignment intact” |
-| Synthesis before routing, stable handoffs, and early messages only for action-changing conflicts | “Collaborate around real dependencies” | “Hand back a result the parent can use” |
-| Falsifiable questions, strong fair baselines, quantitative reasoning, counterevidence, and research continuation | “When the task involves research” | “When the task involves research” |
-| Consequence-based verification, evidence reuse, recovery, and the ban on nonessential hashing | “Verify what determines acceptance” | “Verify the risks that determine delivery” |
-| Reader First selection, whole-sentence deletion, useful explanations, and integrated revision | “Write for the reader's next action” | “Hand back a result the parent can use”; “Write for the recipient's next action” |
-| Actual permission, source identity, credentials, task continuity, and appropriate memory | “Respect authority, sources, and continuity” | “Preserve authority and continuity” |
+| Purpose, assessment versus implementation, kept requirements, and few material questions | “Understand the request” | “Keep the assignment intact” |
+| Named references as the specification; taste only where the user left room | “Fidelity first, taste second” | “Fidelity first, taste second” |
+| Recommendations, reuse, existing entry points and data meaning, engineering and visual quality | “Make clear choices” | “Do the work well” |
+| Skeptical self-review, real failure paths, proportional checks, evidence reuse | “Finish the work and review it” | “Review before you hand back” |
+| Plain verdicts, change-specific precautions only, no defensive code, no offers or cover notes | “Own the call, not your cover” | “Do the work well”; “Hand back a result the parent can use” |
+| Delegation that carries source paths, verification of worker reports, ownership of integration | “Delegate without losing the source” | “Keep the assignment intact”; “Hand back a result the parent can use” |
+| Falsifiable claims, fair baselines, original sources, calculated quantities, counterevidence | “When the task involves research” | “Do the work well” |
+| Claim strength matched to evidence, deletion of defensive filler, plain reporting of real gaps | “Write for the reader, not an imagined critic” | “Hand back a result the parent can use” |
+| Permissions, credentials, untrusted instructions, other people's changes | “Respect authority and data” | Closing paragraph |
 
 ## Why the rules are grouped this way
 
-**Purpose comes before execution.** The prompts distinguish discussing, assessing, gathering evidence, and implementing at the point where the agent interprets the assignment. Ordinary judgment is autonomous within the authorized stage. A follow-up question refines ongoing work rather than silently ending it.
+**The harness keeps its own contract.** Tool use, editing, sandbox, and formatting rules come from the harness. Replacing them with behavioral prose measurably raised token use without improving results, so the recipe only adds preferences and defers to the harness where they differ.
 
-**Taste is a delivery standard.** It covers choosing a worthwhile direction, economical abstractions, deliberate visual hierarchy, readable copy, and inspecting the actual result. It remains a substantive quality obligation rather than an upbeat tone or a prescribed visual theme.
+**Fidelity comes before taste.** In real sessions the costly failure was not timid writing but a model substituting its own layout for the reference the user named, and workers editing from a paraphrase instead of the source. A named reference is therefore the specification, and briefs carry source paths.
 
-**Compatibility belongs with implementation.** Preserving an old call means preserving its entry point, data meaning, and conditions of use. New prerequisites belong only to the new capability. Keeping these together prevents a new feature from quietly narrowing established usage.
+**Defensive behavior is not only a writing problem.** In probes without any user AGENTS.md, native Codex already wrote restrained code, but softened verdicts (“not recommended” for “do not”), prefixed them with “from the current code”, replaced analysis with generic precautions, and closed with what it had not verified or touched. One section now covers verdicts, precautions, evidence limits, code, offers, and housekeeping, with a single test: does this protect the user’s result or the author?
 
-**Research is conditional, not diminished.** Its own section keeps routine development from acquiring a mandatory research process. Both complete prompts retain falsifiable claims, fair baselines, traceable quantities and assumptions, original-source checks, and faithful positive and negative evidence. The main prompt also retains topic selection and cross-line synthesis. Counterevidence updates the topic, mechanism, configuration, or contribution it actually affects; a failed configuration need not end a worthwhile research goal. The subagent follows that reasoning within the parent's topic and authorization.
+**Self-review is part of delivery.** A passing first run is evidence, not completion. One skeptical review of the diff against the full request catches the defects users otherwise report back, while reassurance reruns and review chains stay out.
 
-**Collaboration centers on ownership and decisions.** The main agent may work directly or delegate. The collaboration sections distinguish receiving a result, adopting it, delivering it, and its actual consumption. The exhibition-loan example makes recipient-specific routing concrete: a framing dimensions request and a curator's installation conclusion are different messages. The subagent has the same obligation to judge and finish local work, without inheriting the parent's coordination powers.
+**Reader First is selection before phrasing.** A sentence that answers no reader question is deleted, not softened or moved to small print. A real limit stays next to the claim it limits, and an overclaim is narrowed, so removing defensive filler never inflates a conclusion.
 
-**Reader First is selection before phrasing.** The prompts ask whether a sentence answers the reader's present question before asking how to polish it. Useless material is deleted, not restyled or moved to small print. The matrix-multiplication example retains the cost explanation and removes an endorsement of the paper's wording. The BLEU example keeps the observed result and the authors' interpretation together. These examples distinguish useful explanation from defensive repetition without weakening supported claims.
-
-**Verification follows the affected action.** Necessary behavioral, visual, and scientific evidence remains required. Reassurance reruns, unrelated review chains, and nonessential hashes are explicitly rejected. Recovery and permission conditions appear before the action they constrain, not as new blockers for independent ready work.
+**Research is conditional.** Its own section keeps routine development free of a mandatory research process while retaining falsifiable claims, fair baselines, traceable quantities, and faithful negative results.
 
 ## Codex integration decisions
 
-The Codex adapter retains the existing instruction-file and local-plugin entry points. Shared behavior follows the current runtime's tools, role restrictions, and event semantics. Notification-driven continuation applies when the runtime guarantees completion notifications; waiting follows the supported tool contract and a real dependency. A child resolves its promised dependencies before its final result.
+The Codex adapter manages top-level `developer_instructions` and the local-plugin entry points; earlier `model_instructions_file` installs are returned to their pre-install value. Shared behavior follows the current runtime's tools, role restrictions, and event semantics. Notification-driven continuation applies when the runtime guarantees completion notifications; waiting follows the supported tool contract and a real dependency. A child resolves its promised dependencies before its final result.
 
 Selecting [optional hooks](install.md#add-optional-per-turn-steering) assembles the single author sources into a local marketplace and installs `gpt-with-taste@gpt-with-taste-local` through the normal Codex plugin CLI. The plugin configures three source-specific routes:
 

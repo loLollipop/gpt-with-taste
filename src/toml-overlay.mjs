@@ -1,7 +1,11 @@
 // Adapted from nb-codex-main/src/toml-overlay.mjs (MIT).
 // Copyright (c) 2026 X-T-E-R. See ../LICENSE.
-// This slice manages only top-level model_instructions_file.
+// This slice manages two top-level keys: the legacy single-line
+// model_instructions_file and the developer_instructions string block.
 function fail(message) { throw new Error(message); }
+export const INSTRUCTIONS_KEY = 'model_instructions_file';
+export const DEVELOPER_KEY = 'developer_instructions';
+const BOM = String.fromCharCode(0xfeff);
 function isEscaped(value, index) {
   let slashes = 0;
   for (let cursor = index - 1; cursor >= 0 && value[cursor] === '\\'; cursor -= 1) slashes += 1;
@@ -60,14 +64,28 @@ function tokenRange(raw, equals) {
   while (end < raw.length && !/\s|#/.test(raw[end])) end += 1;
   return { start, end };
 }
-export function scanToml(text) {
+const keyPattern = key => new RegExp(`^(?:${key}|"${key}"|'${key}')$`);
+function singleLineString(raw, equals, key) {
+  const range = tokenRange(raw, equals);
+  const token = raw.slice(range.start, range.end);
+  const tail = raw.slice(range.end).trim();
+  if (!['"', "'"].includes(token[0]) || token.length < 2 || token.at(-1) !== token[0] || (tail && !tail.startsWith('#'))) {
+    fail(`${key} must be a single-line string`);
+  }
+  return range;
+}
+// Find the root assignment of `key`. Its lines run from `index` through `last`,
+// the line that closes a multiline string value. `start`/`end` are the columns
+// of a single-line string token.
+export function scanToml(text, key = INSTRUCTIONS_KEY) {
   if (text.includes('\0')) fail('config.toml contains a NUL byte');
   const newline = text.includes('\r\n') ? '\r\n' : '\n';
   const lines = text.match(/[^\n]*\n|[^\n]+$/g) ?? [];
-  const hasBom = Boolean(lines.length && lines[0].startsWith('\uFEFF'));
+  const hasBom = Boolean(lines.length && lines[0].startsWith(BOM));
   if (hasBom) lines[0] = lines[0].slice(1);
+  const multilineAllowed = key === DEVELOPER_KEY;
   const assignments = [];
-  let firstHeader = lines.length;
+  let open = null;
   let atRoot = true;
   let multiline = null;
   let continuationDepth = 0;
@@ -75,7 +93,10 @@ export function scanToml(text) {
     const raw = lines[index].replace(/\r?\n$/, '');
     const lexical = lexLine(raw, multiline);
     multiline = lexical.multiline;
-    if (lexical.wasMultiline) continue;
+    if (lexical.wasMultiline) {
+      if (open && !multiline) { open.last = index; open = null; }
+      continue;
+    }
     const code = lexical.code.trim();
     if (!code) continue;
     if (continuationDepth > 0) {
@@ -84,64 +105,82 @@ export function scanToml(text) {
       continue;
     }
     if (code.startsWith('[')) {
-      firstHeader = Math.min(firstHeader, index);
       atRoot = false;
       continue;
     }
     const equals = findEquals(lexical.code);
     if (equals < 0) fail(`unsupported TOML statement at line ${index + 1}`);
     const keyText = lexical.code.slice(0, equals).trim();
-    if (atRoot && /^(?:model_instructions_file|"model_instructions_file"|'model_instructions_file')$/.test(keyText)) {
-      if (lexical.multiline || lexical.code.slice(equals + 1).trim().startsWith('"""') || lexical.code.slice(equals + 1).trim().startsWith("'''")) {
-        fail('model_instructions_file must be a single-line string');
-      }
-      const range = tokenRange(raw, equals);
-      const token = raw.slice(range.start, range.end);
-      const tail = raw.slice(range.end).trim();
-      if (!['"', "'"].includes(token[0]) || token.length < 2 || token.at(-1) !== token[0] || (tail && !tail.startsWith('#'))) {
-        fail('model_instructions_file must be a single-line string');
-      }
-      assignments.push({ index, raw, ...range });
-    } else if (atRoot && keyText.includes('model_instructions_file')) {
-      fail('ambiguous model_instructions_file key');
+    if (atRoot && keyPattern(key).test(keyText)) {
+      const value = lexical.code.slice(equals + 1).trim();
+      const isMultiline = Boolean(lexical.multiline) || value.startsWith('"""') || value.startsWith("'''");
+      if (!multilineAllowed && isMultiline) fail(`${key} must be a single-line string`);
+      const assignment = { index, last: index, raw };
+      if (isMultiline) {
+        if (lexical.multiline) open = assignment;
+        else if (raw.slice(raw.indexOf(value) + value.length).trim().replace(/^#.*/, '')) fail(`${key} must be a string`);
+      } else Object.assign(assignment, singleLineString(raw, equals, key));
+      assignments.push(assignment);
+    } else if (atRoot && keyText.includes(key)) {
+      fail(`ambiguous ${key} key`);
     }
     continuationDepth = Math.max(0, lexical.depthDelta);
   }
   if (multiline || continuationDepth !== 0) fail('unterminated TOML string, array or inline table');
-  if (assignments.length > 1) fail('duplicate model_instructions_file key');
-  return { lines, newline, hasBom, firstHeader, assignment: assignments[0] ?? null };
+  if (assignments.length > 1) fail(`duplicate ${key} key`);
+  return { lines, newline, hasBom, assignment: assignments[0] ?? null };
 }
-export function keyLine(text) {
-  const doc = scanToml(text);
-  return doc.assignment ? doc.lines[doc.assignment.index] : null;
+const render = doc => (doc.hasBom ? BOM : '') + doc.lines.join('');
+// The exact text of a managed assignment, including any multiline body.
+export function keyBlock(text, key = INSTRUCTIONS_KEY) {
+  const doc = scanToml(text, key);
+  return doc.assignment ? doc.lines.slice(doc.assignment.index, doc.assignment.last + 1).join('') : null;
 }
+export const keyLine = text => keyBlock(text, INSTRUCTIONS_KEY);
 export function sameInstructionLine(line, recorded) {
   // A line separator belongs to the surrounding document, not the managed key.
   return line === recorded || (typeof line === 'string' && typeof recorded === 'string' &&
     line.replace(/\r?\n$/, '') === recorded.replace(/\r?\n$/, ''));
 }
-export function setInstructions(text, absolutePath) {
-  const doc = scanToml(text);
-  const value = JSON.stringify(absolutePath.replaceAll('\\', '/'));
-  if (doc.assignment) {
-    const a = doc.assignment;
-    const ending = doc.lines[a.index].slice(a.raw.length);
-    doc.lines[a.index] = `${a.raw.slice(0, a.start)}${value}${a.raw.slice(a.end)}${ending}`;
-  } else {
-    doc.lines.unshift(`model_instructions_file = ${value}${doc.newline}`);
+// Replace, insert, or remove (block === null) one managed root assignment.
+export function replaceBlock(text, key, block) {
+  const doc = scanToml(text, key);
+  const a = doc.assignment;
+  if (!a) {
+    if (block === null) return text;
+    const body = block.replace(/\r?\n$/, '');
+    doc.lines.unshift(body + doc.newline);
+    return render(doc);
   }
-  return (doc.hasBom ? '\uFEFF' : '') + doc.lines.join('');
+  const count = a.last - a.index + 1;
+  if (block === null) {
+    doc.lines.splice(a.index, count);
+    return render(doc);
+  }
+  // Preserve an original EOF assignment exactly unless later content needs a separator.
+  const ending = doc.lines[a.last].match(/\r?\n$/)?.[0] ?? '';
+  const later = a.last < doc.lines.length - 1;
+  const separator = later && !/\n$/.test(block) ? ending || doc.newline : '';
+  doc.lines.splice(a.index, count, block + separator);
+  return render(doc);
+}
+export function setInstructions(text, absolutePath) {
+  const doc = scanToml(text, INSTRUCTIONS_KEY);
+  const value = JSON.stringify(absolutePath.replaceAll('\\', '/'));
+  if (!doc.assignment) return replaceBlock(text, INSTRUCTIONS_KEY, `${INSTRUCTIONS_KEY} = ${value}`);
+  const a = doc.assignment;
+  const ending = doc.lines[a.index].slice(a.raw.length);
+  doc.lines[a.index] = `${a.raw.slice(0, a.start)}${value}${a.raw.slice(a.end)}${ending}`;
+  return render(doc);
 }
 export function restoreInstructions(text, oldLine) {
-  const doc = scanToml(text);
-  if (!doc.assignment) fail('managed config key is missing; restore refused');
-  if (oldLine === null) doc.lines.splice(doc.assignment.index, 1);
-  else {
-    const index = doc.assignment.index;
-    // Preserve an original EOF line exactly unless later content needs a separator.
-    const separator = index < doc.lines.length - 1 && !oldLine.endsWith('\n')
-      ? doc.lines[index].slice(doc.assignment.raw.length) || doc.newline : '';
-    doc.lines[index] = oldLine + separator;
-  }
-  return (doc.hasBom ? '\uFEFF' : '') + doc.lines.join('');
+  if (!scanToml(text, INSTRUCTIONS_KEY).assignment) fail('managed config key is missing; restore refused');
+  return replaceBlock(text, INSTRUCTIONS_KEY, oldLine);
 }
+// A TOML literal multiline string keeps the instruction text byte-for-byte.
+export function developerBlock(instructions, newline = '\n') {
+  if (instructions.includes("'''")) fail("developer instructions cannot contain ''' in a TOML literal string");
+  const body = instructions.replace(/\r\n/g, '\n').replace(/\n*$/, '\n').replace(/\n/g, newline);
+  return `${DEVELOPER_KEY} = '''${newline}${body}'''${newline}`;
+}
+export const newlineOf = text => (text.includes('\r\n') ? '\r\n' : '\n');

@@ -5,7 +5,7 @@ import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {spawn} from 'node:child_process';
 import {run} from './install.mjs';
-import {setInstructions} from '../src/toml-overlay.mjs';
+import {setInstructions, replaceBlock, developerBlock, keyBlock, keyLine, DEVELOPER_KEY} from '../src/toml-overlay.mjs';
 import {WAIT_TOOL_MATCHER} from '../hooks/local-tools.mjs';
 import {hookGroup, installHook, ROUTES} from '../src/hooks-overlay.mjs';
 import {MARKET, MARKET_ROOT, ID, pluginBundle} from '../src/codex-plugin.mjs';
@@ -34,7 +34,7 @@ const original='\uFEFF# local config\r\nmodel = "existing-gpt"\r\nmodel_reasonin
 test('prompt-only preserves all other bytes and hooks; no Codex prerequisite; original baseline survives updates',async t=>{
   const {root,home,call,calls}=await fixture(t);await put(path.join(home,'config.toml'),original);await put(path.join(home,'hooks.json'),'INVALID USER HOOK FILE');
   await call('--dry-run');assert.equal(await exists(receipt(root)),false);await call();
-  assert.equal(await fs.readFile(path.join(home,'config.toml'),'utf8'),setInstructions(original,path.join(home,'prompts/gpt-with-taste/main.md')));
+  assert.equal(await fs.readFile(path.join(home,'config.toml'),'utf8'),replaceBlock(original,DEVELOPER_KEY,developerBlock('FIXTURE MAIN — no behavioral claim\n','\r\n')));
   const baseline=await fs.readFile(receipt(root),'utf8');assert.equal(baseline.includes('fixture-secret'),false);await call();assert.equal(await fs.readFile(receipt(root),'utf8'),baseline);
   await put(path.join(root,'prompts/main.md'),'UPDATED');await call();await fs.appendFile(path.join(home,'config.toml'),'[analytics]\r\nenabled = false\r\n');await call('--check');await call('--restore');
   assert.equal(await fs.readFile(path.join(home,'config.toml'),'utf8'),original+'[analytics]\r\nenabled = false\r\n');assert.equal(await fs.readFile(path.join(home,'hooks.json'),'utf8'),'INVALID USER HOOK FILE');assert.deepEqual(calls,[]);
@@ -111,6 +111,49 @@ test('interrupted prompt update restores original bytes',async t=>{
 });
 test('safe TOML insertion preserves multiline unrelated content and rejects invalid managed scalars',async()=>{
   const text='\uFEFFnote = """\nmodel_instructions_file = "not-a-key"\n"""\nitems = [\n  "a",\n]\n["model_providers"."mine"]\nexperimental_bearer_token = "fixture-only"';assert.equal(setInstructions(text,'/home/main.md'),'\uFEFFmodel_instructions_file = "/home/main.md"\n'+text.slice(1));assert.throws(()=>setInstructions('model_instructions_file = "a"\nmodel_instructions_file = "b"\n','/a'),/duplicate/);assert.throws(()=>setInstructions('model_instructions_file = ["not-a-path"]','/a'),/single-line/);
+});
+test('developer block round-trips multiline TOML and rejects text it cannot store literally',()=>{
+  const text='model = "m"\n'+"developer_instructions = '''\nmine\n# not a comment\n'''\n"+'[features]\nx = """\ndeveloper_instructions = "no"\n"""\n';
+  assert.equal(keyBlock(text,DEVELOPER_KEY),"developer_instructions = '''\nmine\n# not a comment\n'''\n");
+  const replaced=replaceBlock(text,DEVELOPER_KEY,developerBlock('NEW\n'));
+  assert.equal(replaced,'model = "m"\n'+"developer_instructions = '''\nNEW\n'''\n"+'[features]\nx = """\ndeveloper_instructions = "no"\n"""\n');
+  assert.equal(replaceBlock(replaced,DEVELOPER_KEY,keyBlock(text,DEVELOPER_KEY)),text);
+  assert.equal(replaceBlock(text,DEVELOPER_KEY,null),'model = "m"\n[features]\nx = """\ndeveloper_instructions = "no"\n"""\n');
+  assert.equal(keyBlock('[t]\ndeveloper_instructions = "nested"\n',DEVELOPER_KEY),null);
+  assert.throws(()=>developerBlock("bad ''' text"),/cannot contain/);
+  assert.throws(()=>keyBlock('developer_instructions = "a"\ndeveloper_instructions = "b"\n',DEVELOPER_KEY),/duplicate/);
+});
+test('upgrade from a model_instructions_file receipt restores the pre-install line and appends Main',async t=>{
+  const f=await fixture(t),config=path.join(f.home,'config.toml');await put(config,original);
+  // Reproduce the previous installer's receipt: Main replaced the base instructions.
+  const oldLine=keyLine(original),mainPath=path.join(f.home,'prompts/gpt-with-taste/main.md'),mainBytes=Buffer.from('OLD MAIN\n');
+  const replaced=setInstructions(original,mainPath);await put(config,replaced);await put(mainPath,mainBytes);
+  await put(receipt(f.root),JSON.stringify({version:1,status:'applied',home:f.home,config:{before:oldLine,after:keyLine(replaced),fileWasAbsent:false},files:[{path:'prompts/gpt-with-taste/main.md',before:null,after:mainBytes.toString('base64')}]}));
+  await f.call('--check');await f.call();
+  const upgraded=await fs.readFile(config,'utf8');
+  assert.equal(keyLine(upgraded),oldLine);assert.match(keyBlock(upgraded,DEVELOPER_KEY),/FIXTURE MAIN/);
+  const data=JSON.parse(await fs.readFile(receipt(f.root)));assert.equal(data.config.before,oldLine);assert.equal(data.developer.before,null);assert.equal(data.developer.previous,undefined);
+  await f.call('--check');await f.call('--restore');assert.equal(await fs.readFile(config,'utf8'),original);
+});
+test('upgrade removes a model_instructions_file the earlier install added to a config that had none',async t=>{
+  const f=await fixture(t),config=path.join(f.home,'config.toml'),plain='model = "m"\n[features]\nx = true\n';
+  const replaced=setInstructions(plain,path.join(f.home,'prompts/gpt-with-taste/main.md'));await put(config,replaced);
+  await put(receipt(f.root),JSON.stringify({version:1,status:'applied',home:f.home,config:{before:null,after:keyLine(replaced),fileWasAbsent:false},files:[]}));
+  await f.call();const upgraded=await fs.readFile(config,'utf8');assert.equal(keyLine(upgraded),null);assert.ok(upgraded.startsWith("developer_instructions = '''\nFIXTURE MAIN"));
+  await f.call('--restore');assert.equal(await fs.readFile(config,'utf8'),plain);
+});
+test('an existing user developer_instructions requires --replace-managed and restores exactly',async t=>{
+  const f=await fixture(t),config=path.join(f.home,'config.toml');
+  const mine='model = "m"\ndeveloper_instructions = """\nUSER RULES\n""" # keep\n[features]\nx = true\n';await put(config,mine);
+  await assert.rejects(f.call(),/Existing developer_instructions is not managed/);assert.equal(await exists(receipt(f.root)),false);
+  await f.call('--replace-managed');assert.match(keyBlock(await fs.readFile(config,'utf8'),DEVELOPER_KEY),/FIXTURE MAIN/);
+  await f.call();await f.call('--restore');assert.equal(await fs.readFile(config,'utf8'),mine);
+});
+test('developer_instructions drift stops check and restore before changing state',async t=>{
+  const f=await fixture(t),config=path.join(f.home,'config.toml');await f.call();const installed=await fs.readFile(config,'utf8');
+  await put(config,installed.replace('FIXTURE MAIN','USER EDIT'));const before=await fs.readFile(receipt(f.root));
+  await assert.rejects(f.call('--check'),/drifted: developer_instructions/);await assert.rejects(f.call('--restore'),/drifted: developer_instructions/);await assert.rejects(f.call(),/drifted: developer_instructions/);
+  assert.deepEqual(await fs.readFile(receipt(f.root)),before);await put(config,installed);await f.call('--restore');assert.equal(await exists(config),false);
 });
 
 test('interrupted plugin refresh accepts previous and new cache bytes while restoring the original baseline',async t=>{

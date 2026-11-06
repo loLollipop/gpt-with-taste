@@ -30,19 +30,39 @@ test('author package is complete, host-neutral and position-specific', async () 
     assert.doesNotMatch(text, /current Codex|@variant/);
     assert.match(text, /user's (?:latest language|chosen persona|explicit persona)/);
   }
-  assert.match(texts.main, /Own the result the user is trying to achieve/);
-  assert.match(texts.main, /Even after a review or tests pass/);
-  assert.match(texts.main, /documentation, metrics, or behavior were redefined/);
+  assert.match(texts.main, /# GPT with Taste — Main/);
+  assert.match(texts.main, /Delegate without losing the source/);
   assert.match(texts.sub, /parent owns cross-task coordination/);
   assert.match(texts.sub, /leaf status/);
   assert.doesNotMatch(texts.independent, /parent|assigned to you|delegated agent|you are a subagent/i);
   assert.match(texts.independent, /actual controller/);
-  for (const key of ['main', 'sub']) {
+  for (const key of ['main', 'sub', 'independent']) {
+    // Texts are appended to a harness's own instructions; they must not claim to replace them.
+    assert.match(texts[key], /add to the instructions your harness/);
     assert.match(texts[key], /falsifiable/);
-    assert.match(texts[key], /ISO 24495-1:2023/);
-    assert.match(texts[key], /entry points, data meaning, and conditions/);
-    assert.match(texts[key], /Nonessential hash verification is prohibited/);
+    assert.match(texts[key], /reference|source material/);
   }
+  for (const key of ['main', 'sub']) {
+    assert.match(texts[key], /Fidelity first, taste second/);
+    assert.match(texts[key], /entry points, data meaning, and conditions/);
+  }
+  // Anti-defensive behavior covers verdicts, precautions, code, and offers, not only prose.
+  assert.match(texts.main, /Own the call, not your cover/);
+  for (const key of ['main', 'sub', 'independent']) {
+    assert.match(texts[key], /verdict/);
+    assert.match(texts[key], /generic checklists?/i);
+    assert.match(texts[key], /silent fallbacks/);
+  }
+});
+
+test('recipe stays lean and free of case-specific rules', async () => {
+  const {texts} = await loadRecipe(repo);
+  const words = text => (text.match(/[A-Za-z]+(?:[-'][A-Za-z]+)*/g) ?? []).length;
+  assert.ok(words(texts.main) <= 1400, `main has ${words(texts.main)} words`);
+  assert.ok(words(texts.sub) <= 900, `sub has ${words(texts.sub)} words`);
+  assert.ok(words(texts.independent) <= 700, `independent has ${words(texts.independent)} words`);
+  for (const text of Object.values(texts))
+    assert.doesNotMatch(text, /SHA-256|BLEU|matrix-multiplication|exhibition|BUTTON_GUIDE|ISO 24495/);
 });
 
 test('self-review belongs to delivery and Steers stay focused on the actual result', async () => {
@@ -54,10 +74,10 @@ test('self-review belongs to delivery and Steers stay focused on the actual resu
   }
   for (const key of ['userSteer', 'subSteer', 'agentSteer']) {
     const words = texts[key].match(/[A-Za-z]+(?:[-'][A-Za-z]+)*/g) ?? [];
-    assert.ok(words.length <= 250, `${key} should remain a short event reminder`);
+    assert.ok(words.length <= 100, `${key} should remain a short event reminder`);
     assert.match(texts[key], /actual (?:diff or artifact|artifact)/);
     assert.match(texts[key], /reuse valid evidence/i);
-    assert.doesNotMatch(texts[key], /ISO 24495|matrix-multiplication|footnotes|collapsed sections/);
+    assert.match(texts[key], /source/);
   }
   assert.match(texts.userSteer, /verification proportional to the change and its consequences/);
   assert.match(texts.subSteer, /Keep checks proportional/);
@@ -148,10 +168,10 @@ test('Kiki schema v1 keeps whole-branch isolation, all Steers and the four legac
       return content(files, `${base}/${match[1]}`);
     };
     assert.match(readSlot(common, 'system'), /Own the complete result assigned to you/);
-    assert.match(readSlot(main, 'system'), /Own the result the user is trying to achieve/);
+    assert.match(readSlot(main, 'system'), /# GPT with Taste — Main/);
     assert.match(readSlot(independent, 'system'), /Turn the user's intent/);
-    assert.match(readSlot(common, 'steering'), /parent's goal/);
-    assert.match(readSlot(main, 'steering'), /user's purpose/);
+    assert.match(readSlot(common, 'steering'), /Continue your assignment within your role/);
+    assert.match(readSlot(main, 'steering'), /Reconnect this input to the user's goal/);
     assert.match(section(text, 'prompts.steering_sources.agent'), /^mode = "inherit"/);
     for (const source of ['agent', 'task']) {
       const steer = section(text, `prompts.main.steering_sources.${source}`);
