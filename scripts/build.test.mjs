@@ -24,7 +24,6 @@ const content = (map, file) => map.get(file).toString();
 test('author package is complete, host-neutral and position-specific', async () => {
   const {meta, texts} = await loadRecipe(repo);
   assert.equal(meta.version, '0.1.0');
-  assert.equal(meta.compatibility.kiki.version, '1.0.7');
   assert.deepEqual(Object.keys(texts), TEXT_KEYS);
   for (const text of Object.values(texts)) {
     assert.doesNotMatch(text, /current Codex|@variant/);
@@ -53,12 +52,21 @@ test('author package is complete, host-neutral and position-specific', async () 
     assert.match(texts[key], /generic checklists?/i);
     assert.match(texts[key], /silent fallbacks/);
   }
+  // Requirements persist across the conversation instead of being dropped on a follow-up.
+  assert.match(texts.main, /stays in force until completed, superseded, or rescinded/);
+  assert.match(texts.userSteer, /requirements the user stated earlier in force/);
+  // Documents keep their own genre instead of chat-style verdict-first bleeding into them.
+  assert.match(texts.main, /paper, chapter, or report/);
+  assert.match(texts.independent, /follows its own genre/);
+  assert.match(texts.userSteer, /follow its genre and structure instead/);
+  // Delivery defaults ordinary details instead of making the user enumerate them.
+  assert.match(texts.main, /never to have the user spell out ordinary details/);
 });
 
 test('recipe stays lean and free of case-specific rules', async () => {
   const {texts} = await loadRecipe(repo);
   const words = text => (text.match(/[A-Za-z]+(?:[-'][A-Za-z]+)*/g) ?? []).length;
-  assert.ok(words(texts.main) <= 1400, `main has ${words(texts.main)} words`);
+  assert.ok(words(texts.main) <= 1450, `main has ${words(texts.main)} words`);
   assert.ok(words(texts.sub) <= 900, `sub has ${words(texts.sub)} words`);
   assert.ok(words(texts.independent) <= 700, `independent has ${words(texts.independent)} words`);
   for (const text of Object.values(texts))
@@ -111,101 +119,46 @@ test('check detects manual and source drift, remains read-only and respects sele
   await run([], root);
   await run(['--check'], root);
   const source = path.join(root, 'recipe/main.md'), before = await fs.readFile(source);
-  const output = path.join(root, 'dist/kiki/main.md');
+  const output = path.join(root, 'dist/codex/main.md');
+  const projected = path.join(root, 'prompts/main.md');
   await fs.appendFile(output, '\nMANUAL DRIFT\n');
-  await assert.rejects(run(['--check', '--target', 'kiki'], root), /dist\/kiki\/main.md/);
-  await run(['--check', '--target', 'codex'], root);
+  await assert.rejects(run(['--check'], root), /dist\/codex\/main\.md/);
   assert.deepEqual(await fs.readFile(source), before);
   assert.match(await fs.readFile(output, 'utf8'), /MANUAL DRIFT/);
-  await run(['--target', 'kiki'], root);
-  await fs.appendFile(source, '\nSOURCE CHANGE\n');
-  await assert.rejects(run(['--check'], root), /prompts\/main.md/);
-  await run(['--target', 'codex'], root);
-  await run(['--check', '--target', 'codex'], root);
-  await assert.rejects(run(['--check', '--target', 'kiki'], root), /dist\/kiki\/main.md/);
-  await run(['--target', 'kiki'], root);
-  if (TARGETS.some(target => !['codex', 'kiki'].includes(target)))
-    await assert.rejects(run(['--check'], root), /Generated files have drifted/);
   await run([], root);
   await run(['--check'], root);
+  await fs.appendFile(source, '\nSOURCE CHANGE\n');
+  await assert.rejects(run(['--check'], root), /prompts\/main\.md/);
+  await assert.rejects(run(['--check'], root), /dist\/codex\/main\.md/);
+  await fs.appendFile(source, '\nMORE\n');
+  await run(['--target', 'codex'], root);
+  await run(['--check', '--target', 'codex'], root);
+  for (const file of [output, projected])
+    assert.match(await fs.readFile(file, 'utf8'), /SOURCE CHANGE/);
 });
 
-test('one source edit reaches every implemented target and only its corresponding Markdown projections', async t => {
+test('one source edit reaches every Codex output and only its Markdown projection of that text', async t => {
   const root = await fixture(t);
   const before = await compile(root);
   await fs.appendFile(path.join(root, 'recipe/main.md'), '\nONE SOURCE CHANGE\n');
   const after = await compile(root);
-  for (const target of TARGETS) {
-    const changed = [...after.keys()].filter(file => file.startsWith(`dist/${target}/`) &&
-      !Buffer.from(before.get(file)).equals(Buffer.from(after.get(file))));
-    assert.ok(changed.length, target);
-    for (const file of changed) assert.match(content(after, file), /ONE SOURCE CHANGE/);
-    if (target === 'codex' || target === 'kiki')
-      assert.ok(changed.every(file => file.endsWith('main.md')), changed.join(', '));
-  }
-  assert.match(content(after, 'prompts/main.md'), /ONE SOURCE CHANGE/);
-  assert.equal(after.get('prompts/sub.md'), before.get('prompts/sub.md'));
+  const changed = [...after.keys()].filter(file =>
+    !Buffer.from(after.get(file)).equals(Buffer.from(before.get(file))));
+  assert.deepEqual(changed, ['dist/codex/main.md', 'prompts/main.md']);
+  for (const file of changed) assert.match(content(after, file), /ONE SOURCE CHANGE/);
+  for (const file of after.keys()) assert.ok(
+    changed.includes(file) || Buffer.from(after.get(file)).equals(Buffer.from(before.get(file))), file);
 });
 
-test('Kiki schema v1 keeps whole-branch isolation, all Steers and the four legacy aliases', async () => {
-  const files = await compile(repo, ['kiki']);
-  const packages = [...files.keys()].filter(file => file.endsWith('.toml'));
-  // Assert the declared branch contracts without adding a parser dependency to Node-only tests.
-  const section = (text, name) => {
-    const start = text.indexOf(`[${name}]\n`);
-    assert.notEqual(start, -1, name);
-    return text.slice(start + name.length + 3).split('\n[')[0];
-  };
-  for (const file of packages) {
-    const text = content(files, file), base = path.posix.dirname(file);
-    assert.match(text, /schema_version = 1\n/);
-    assert.ok(text.includes(`version = "${file.includes('/sol-astra/') ? '1.0.7' : '0.1.0'}"`));
-    const common = section(text, 'prompts'), main = section(text, 'prompts.main');
-    const independent = section(text, 'prompts.independent');
-    const readSlot = (body, key) => {
-      const match = body.match(new RegExp(`^${key} = \\{ file = "([^"]+)" \\}`, 'm'));
-      assert.ok(match, `${file}: ${key}`);
-      return content(files, `${base}/${match[1]}`);
-    };
-    assert.match(readSlot(common, 'system'), /Own the complete result assigned to you/);
-    assert.match(readSlot(main, 'system'), /# GPT with Taste — Main/);
-    assert.match(readSlot(independent, 'system'), /Turn the user's intent/);
-    assert.match(readSlot(common, 'steering'), /Continue your assignment within your role/);
-    assert.match(readSlot(main, 'steering'), /Reconnect this input to the user's goal/);
-    assert.match(section(text, 'prompts.steering_sources.agent'), /^mode = "inherit"/);
-    for (const source of ['agent', 'task']) {
-      const steer = section(text, `prompts.main.steering_sources.${source}`);
-      assert.match(steer, /^mode = "custom"/);
-      const match = steer.match(/custom = \{ steering = \{ file = "([^"]+)" \}/);
-      assert.ok(match);
-      assert.match(content(files, `${base}/${match[1]}`), /Reconcile this message or task result/);
-      assert.match(steer, /steering_on_turn = true, steering_on_input = true, steering_interval_steps = 0/);
-      assert.match(section(text, `prompts.independent.steering_sources.${source}`), /^mode = "off"/);
-    }
-    assert.match(independent, /steering = "off"/);
-    assert.match(independent, /steering_on_turn = false/);
-    assert.match(independent, /steering_on_input = false/);
-    for (const [, reference] of text.matchAll(/file = "([^"]+)"/g)) assert.ok(files.has(`${base}/${reference}`), reference);
-  }
-  assert.deepEqual(JSON.parse(content(files, 'dist/kiki/sol-astra/mapping.json')), {schema: 1, models: {
-    'axon/gpt-6.1-sol': 'sol.toml',
-    'axon/gpt-6-astra': 'astra.toml',
-    'axon-for-test/gpt-6-astra': 'astra.toml',
-    'axon/gpt-6-astra-text-recovery': 'astra.toml',
-  }});
-  assert.match(content(files, 'dist/kiki/sol-astra/sol.toml'), /id = "gpt-6.1-sol-behavior"\nname = "GPT-6.1 Sol — 工作方式"/);
-  assert.match(content(files, 'dist/kiki/sol-astra/astra.toml'), /id = "gpt-6-astra-behavior"\nname = "GPT-6 Astra — 工作方式"/);
-});
-
-test('selected target does not import another adapter; invalid targets and unsafe paths fail', async t => {
+test('a selected target loads only its own adapter; invalid targets and unsafe paths fail', async t => {
   const root = await fixture(t);
-  await fs.rm(path.join(root, 'adapters/kiki'), {recursive: true});
   await compile(root, ['codex']);
   await assert.rejects(compile(root, ['unknown']), /Unknown build target/);
   await assert.rejects(run(['--target'], root), /requires an id/);
   await assert.rejects(run(['--typo'], root), /Unknown argument/);
   const unsafe = await fixture(t);
-  await fs.writeFile(path.join(unsafe, 'adapters/codex/build.mjs'), 'export async function render() { return new Map([["../escape.md", "escape"]]); }');
+  await fs.writeFile(path.join(unsafe, 'adapters/codex/build.mjs'),
+    'export async function render() { return new Map([["../escape.md", "escape"]]); }');
   await assert.rejects(compile(unsafe, ['codex']), /invalid or reserved output path/);
 });
 
@@ -232,37 +185,20 @@ const authorTrace = /<!--\s*Generated from recipe\/|recipe\/manifest\.json|adapt
 const assertCleanContext = value => assert.doesNotMatch(JSON.stringify(value) ?? '', authorTrace);
 
 function assertBehaviorExports(files, {meta, texts}) {
-  for (const target of ['codex', 'kiki', 'pi', 'omp'])
+  for (const target of TARGETS)
     for (const key of TEXT_KEYS)
       assert.equal(content(files, `dist/${target}/${meta.texts[key]}`), texts[key]);
   for (const name of ['main', 'sub', 'user-steer', 'sub-steer', 'agent-steer']) {
     const key = TEXT_KEYS.find(key => meta.texts[key] === `${name}.md`);
     assert.equal(content(files, `prompts/${name}.md`), texts[key]);
   }
-  const legacy = 'dist/kiki/sol-astra/';
-  for (const pack of meta.compatibility.kiki.packages)
-    for (const key of ['main', 'independent']) assert.equal(content(files, legacy + pack[key]), texts[key]);
-  for (const [key, name] of Object.entries({sub: 'sol-astra-sub.md', userSteer: 'sol-astra-main-steering.md',
-    subSteer: 'sol-astra-sub-steering.md', agentSteer: 'sol-astra-main-agent-steering.md'}))
-    assert.equal(content(files, legacy + name), texts[key]);
-  for (const key of ['main', 'independent']) assert.equal(content(files, `dist/claude/${meta.texts[key]}`), texts[key]);
-  for (const directory of ['plugin', 'prompt-only']) {
-    const prefix = `dist/claude/${directory}/`;
-    const agent = content(files, prefix + 'agents/taste-worker.md');
-    assert.equal(agent.slice(agent.indexOf('\n---\n') + 6), texts.sub);
-    assert.equal(content(files, prefix + 'texts/sub.md'), texts.sub);
-  }
-  for (const key of ['userSteer', 'subSteer', 'agentSteer'])
-    assert.equal(content(files, `dist/claude/plugin/texts/${meta.texts[key]}`), texts[key]);
-  assert.deepEqual(JSON.parse(content(files, 'dist/dsh/texts.json')), texts);
 }
 
 test('model-facing exports contain only complete behavior; provenance stays in sidecars', async () => {
   const recipe = await loadRecipe(repo), files = await compile(repo);
   assertBehaviorExports(files, recipe);
   for (const [file, bytes] of files)
-    if ((file.endsWith('.md') && !file.endsWith('/PROVENANCE.md')) || file === 'dist/dsh/texts.json')
-      assertCleanContext(bytes.toString());
+    if (file.endsWith('.md')) assertCleanContext(bytes.toString());
   for (const target of TARGETS) assert.match(content(files, `dist/${target}/build-manifest.json`), /recipe\/manifest\.json/);
 });
 
@@ -276,10 +212,9 @@ test('behavior sources are exported verbatim, including whitespace and literal u
   assertBehaviorExports(await compile(root), {meta, texts});
 });
 
-test('actual generated callbacks and simulated provider payloads keep author metadata out of model context', async t => {
-  const root = await fixture(t), {texts} = await loadRecipe(root), files = await run([], root);
-  const {pathToFileURL} = await import('node:url');
-  const moduleAt = relative => import(pathToFileURL(path.join(root, relative)).href);
+test('generated hook callbacks keep author metadata out of model context', async t => {
+  const root = await fixture(t), {texts} = await loadRecipe(root);
+  await run([], root);
   const wrapped = (key, tag = 'gpt-with-taste') => `<${tag}>\n${texts[key].trim()}\n</${tag}>`;
 
   const {handleHook} = await import('../hooks/steer.mjs');
@@ -293,80 +228,4 @@ test('actual generated callbacks and simulated provider payloads keep author met
     assert.equal(output.hookSpecificOutput.additionalContext, wrapped(key, `gpt-with-taste-${route}-steer`));
     assertCleanContext(output);
   }
-
-  const claude = await moduleAt('dist/claude/plugin/scripts/hook.mjs');
-  for (const [event, expected] of [
-    [{hook_event_name: 'UserPromptSubmit'}, texts.userSteer],
-    [{hook_event_name: 'SubagentStart', agent_type: 'Explore'}, `${texts.sub}\n\n${texts.subSteer}`],
-    [{hook_event_name: 'PostToolUse', tool_name: 'Agent', tool_response: {status: 'completed'}}, texts.agentSteer],
-  ]) {
-    const output = await claude.route(event);
-    assert.equal(output.hookSpecificOutput.additionalContext, expected);
-    assertCleanContext(output);
-  }
-  const promptOnly = await moduleAt('dist/claude/prompt-only/scripts/hook.mjs');
-  const child = await promptOnly.route({hook_event_name: 'SubagentStart', agent_type: 'Explore'}, {mode: 'prompts'});
-  assert.equal(child.hookSpecificOutput.additionalContext, texts.sub);
-  assertCleanContext(child);
-
-  // Exercise the emitted runtimes with native callback-shaped inputs, without a model/provider.
-  for (const target of ['pi', 'omp']) {
-    const runtime = await moduleAt(`dist/${target}/runtime.mjs`);
-    for (const role of ['main', 'sub', 'independent']) {
-      const callbacks = new Map();
-      const api = {on: (name, callback) => callbacks.set(name, callback), registerCommand() {}};
-      runtime.createTasteExtension({role, completedResultTypes: ['fixture:completed']})(api);
-      const ctx = {model: {provider: 'openai', id: 'gpt-fixture'},
-        agent: {kind: role === 'sub' ? 'sub' : 'main'}, sessionManager: {getBranch: () => []}};
-      const system = {role: 'system', content: 'HOST', sections: {host: 'HOST'}};
-      const user = {role: 'user', content: 'Continue', timestamp: 1};
-      const result = target === 'pi'
-        ? {role: 'custom', customType: 'fixture:completed', content: 'Result', timestamp: 2}
-        : {role: 'custom', customType: 'async-result', attribution: 'agent', content: 'Result', timestamp: 2,
-          details: {jobs: [{type: 'task', status: 'completed'}]}};
-      let projected;
-      if (target === 'pi') {
-        projected = callbacks.get('context_with_system')({messages: [system, user, result]}, ctx);
-        assert.equal(projected.messages[0].sections.gpt_with_taste, wrapped(role));
-      } else {
-        const prepared = callbacks.get('before_agent_start')({systemPrompt: ['HOST']}, ctx);
-        assert.deepEqual(prepared.systemPrompt, ['HOST', wrapped(role)]);
-        assertCleanContext(prepared);
-        projected = callbacks.get('context')({messages: [system, user, result]}, ctx);
-        const completed = callbacks.get('tool_result')({toolName: 'task', isError: false,
-          details: {results: [{exitCode: 0}]}}, ctx);
-        assert.deepEqual(completed, role === 'main' ? {additionalContext: texts.agentSteer.trim()} : undefined);
-        assertCleanContext(completed);
-      }
-      const steers = projected.messages.filter(message => message.customType === 'gpt-with-taste:steer');
-      const expected = role === 'independent' ? [] : role === 'sub' ? [['sub', 'subSteer']] : [['user', 'userSteer'], ['agent', 'agentSteer']];
-      assert.deepEqual(steers.map(message => message.content), expected.map(([route, key]) => wrapped(key, `gpt-with-taste-${route}-steer`)));
-      assertCleanContext(projected);
-      const payload = callbacks.get('before_provider_request')({payload: {model: 'gpt-fixture', instructions: 'HOST', input: []}}, ctx);
-      assert.equal(payload.instructions, `HOST\n\n${wrapped(role)}`);
-      assertCleanContext(payload);
-    }
-  }
-
-  // Minimal SDK boundary stub: run the generated DSH callbacks, retaining their own message construction.
-  const sdk = path.join(root, 'dist/dsh/node_modules/@deepseek-ai/dsh-llm');
-  await fs.mkdir(sdk, {recursive: true});
-  await fs.writeFile(path.join(sdk, 'package.json'), JSON.stringify({type: 'module', exports: './index.mjs'}));
-  await fs.writeFile(path.join(sdk, 'index.mjs'), 'export const createUserMessage = value => value;\n');
-  const dsh = await moduleAt('dist/dsh/index.mjs');
-  for (const role of ['main', 'sub', 'independent']) {
-    let section, callback;
-    await dsh.apply({systemPrompt: {section: value => { section = value; }},
-      on: (_event, value) => { callback = value; }}, {rootRole: role === 'independent' ? 'independent' : 'main'});
-    const agent = {session: {header: {origin: role === 'sub' ? 'subagent' : 'main'}}};
-    assert.equal(section.text({agent}), texts[role]);
-    const input = [{source: {kind: 'user'}, content: [{type: 'text', text: 'Continue'}]},
-      {source: {kind: 'subagent-report'}, content: [{type: 'text', text: 'Result'}]}];
-    const output = await callback({agent}, async () => ({kind: 'enter', messages: input}));
-    const added = output.messages.filter(message => message.source.kind === 'plugin');
-    const expected = role === 'independent' ? [] : role === 'sub' ? [texts.subSteer, texts.subSteer] : [texts.userSteer, texts.agentSteer];
-    assert.deepEqual(added.map(message => message.content[0].text), expected);
-    assertCleanContext({system: section.text({agent}), messages: output.messages});
-  }
-  assertBehaviorExports(files, {meta: (await loadRecipe(root)).meta, texts});
 });

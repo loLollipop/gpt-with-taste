@@ -1,6 +1,6 @@
 # Change the recipe once
 
-Edit `recipe/`, then build. Every harness receives the same behavior through its own prompt and event interfaces.
+Edit `recipe/`, then build. Codex receives the same behavior through its compiled prompt files and plugin texts.
 
 ```sh
 node scripts/build.mjs
@@ -24,20 +24,20 @@ Text sources and generated resources use LF line endings through `.gitattributes
 
 Edit a source where its responsibility lives. Keep revisions integrated into the existing paragraph, then read the complete affected instruction. Research stays conditional; ordinary development does not acquire a mandatory scientific workflow. Reply language follows the user, while project artifacts follow their own conventions.
 
-`adapters/` owns harness-specific loading, identity, message events, and packaging. `dist/` contains generated artifacts. The old `prompts/` paths are generated Codex compatibility exports, so the installer and optional plugin retain their existing entry points.
+`adapters/` owns target-specific loading, identity, message events, and packaging. `dist/` contains generated artifacts. The old `prompts/` paths are generated Codex compatibility exports, so the installer and optional plugin retain their existing entry points.
 
-The package version lives in the recipe manifest. Its Kiki compatibility metadata retains the previous Sol/Astra package IDs, version, and exact four-alias map. Revisions can change without a version bump during refinement.
+The package version lives in the recipe manifest. Revisions can change without a version bump during refinement.
 
 ## Build one target
 
 ```sh
-node scripts/build.mjs --target kiki
-node scripts/build.mjs --target claude --check
+node scripts/build.mjs --target codex
+node scripts/build.mjs --target codex --check
 ```
 
 Repeat `--target` to select several. A targeted build loads only those adapters. `--check` compares expected bytes with the explicit output list and reports stale or missing artifacts without writing.
 
-Model-facing Markdown and text resources preserve the behavior source verbatim. Author paths, source versions, generator names, and rebuild instructions belong in sidecar metadata, separate from prompt bodies and callback context. Each `dist/<harness>/build-manifest.json` records the author paths, adapter, source version, and generated files; adapter-specific `PROVENANCE.md` files retain transport attribution. For the managed Kiki operations checkout, its `build-sol-astra.mjs` bridge checks this same compiler output before mirroring the compatibility files.
+Model-facing Markdown and text resources preserve the behavior source verbatim. Author paths, source versions, generator names, and rebuild instructions belong in sidecar metadata, separate from prompt bodies and callback context. Each `dist/<target>/build-manifest.json` records the author paths, adapter, source version, and generated files.
 
 ## Add a harness
 
@@ -62,4 +62,4 @@ Write the harness's activation, update, and removal steps in `docs/harnesses/<id
 
 ## Publish a change
 
-Review the author diff alongside the generated diff. Check the affected adapter, existing consumers, instructions, and recovery path. Commit author sources and their generated files together. Install from the chosen local revision using the harness guide; manual update checks report available source changes without downloading or applying them.
+Review the author diff alongside the generated diff. Check the affected adapter, existing consumers, instructions, and recovery path. Commit author sources and their generated files together. Install from the chosen local revision using [docs/install.md](install.md); manual update checks report available source changes without downloading or applying them.

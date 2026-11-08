@@ -9,13 +9,12 @@
 </picture>
 
 <p align="center">
-  一套跨宿主、即装即用的 GPT 行为配方：作出常规判断、消化复杂度，并以工程与视觉审美交付工作。<br>
+  一套即装即用的 GPT 行为配方，面向 OpenAI Codex：作出常规判断、消化复杂度，并以工程与视觉审美交付工作。<br>
   面向 GPT 推理家族，尤其是 GPT-6.1 Sol 与 GPT-6 Astra；回复跟随你使用的语言。<br>
   <em>Better judgment. Better taste. Less ceremony.</em>
 </p>
 
 <p align="center">
-  <a href="#harnesses">宿主适配</a> ·
   <a href="#install">安装 Codex</a> ·
   <a href="#what-changes">改变什么</a> ·
   <a href="#featured-case">对照示例</a> ·
@@ -25,24 +24,7 @@
 
 ---
 
-本仓库基于 [NB-Corp/gpt-with-taste](https://github.com/NB-Corp/gpt-with-taste) 定制：Main 以追加方式接入 Codex，不再替换其 base instructions；参考实现的忠实度优先于个人审美；Steer 精简为几句提醒。自审属于交付本身，检查与实际改动相称。自定义 Codex 子代理可接入[简短的角色质量要求](docs/role-quality.md)，安装器不会替换现有角色。下方对照案例来自上游。
-
-<a id="harnesses"></a>
-
-## 宿主适配
-
-GPT with Taste 由单一行为配方源编译生成，为各支持宿主提供原生指令与事件提醒：
-
-| 宿主 | 接入形式 | 配置说明 |
-| --- | --- | --- |
-| **OpenAI Codex** | 追加 `developer_instructions` 与 hooks 叠加层 | [docs/install.md](docs/install.md)（或见下方快速安装） |
-| **Claude Code** | Main 指令追加与原生插件（Sub + 3 路 Steer） | [docs/harnesses/claude.md](docs/harnesses/claude.md) |
-| **Kiki** | 原生 Recipe（通用包与 Sol/Astra 兼容包） | [docs/harnesses/kiki.md](docs/harnesses/kiki.md) |
-| **Pi** | 带 payload 防护的请求级扩展 | [docs/harnesses/pi.md](docs/harnesses/pi.md) |
-| **Oh My Pi (OMP)** | 原生身份感知扩展 | [docs/harnesses/omp.md](docs/harnesses/omp.md) |
-| **DeepSeek Harness (dsh)** | 原生 Cordis 插件与请求级提醒 | [docs/harnesses/dsh.md](docs/harnesses/dsh.md) |
-
-要在其他宿主中使用？参考 [docs/harnesses/porting.md](docs/harnesses/porting.md)。维护者在 `recipe/` 中维护单一英文作者源，通过编译器适配各个目标：详见 [docs/authoring.md](docs/authoring.md)。
+本仓库基于 [NB-Corp/gpt-with-taste](https://github.com/NB-Corp/gpt-with-taste) 定制：Main 以追加方式接入 Codex，不再替换其 base instructions；参考实现的忠实度优先于个人审美；Steer 精简为几句提醒。自审属于交付本身，检查与实际改动相称。自定义 Codex 子代理可接入[简短的角色质量要求](docs/role-quality.md)，安装器不会替换现有角色。下方对照案例来自上游。`recipe/` 中的单一英文源编译生成 Codex 提示词与插件：改行为请编辑该目录并按 [docs/authoring.md](docs/authoring.md) 重新编译。
 
 ---
 
@@ -104,10 +86,10 @@ GPT with Taste 把判断力用在结果上：作出合理选择、保留有据�
 
 ## 工作机制
 
-1. **系统提示词设定长期优先级。** 跨宿主覆盖判断、执行、协作与审美；提示词本体为英文，回复跟随你最新使用的语言。
-2. **Steer 在受支持的事件处重新强调对应行为。** 通过本地 hooks、extensions 或 native Recipe 事件，把用户提醒传递给主控，把范围内执行提醒传递给受派 Agent，并在收到协作结果后向主控补充输入消费提醒。
+1. **系统提示词设定长期优先级。** 覆盖判断、执行、协作与审美；提示词本体为英文，回复跟随你最新使用的语言。
+2. **Steer 在受支持的事件处重新强调对应行为。** 通过本地 hooks，把用户提醒传递给主控，把范围内执行提醒传递给受派 Agent，并在收到协作结果后向主控补充输入消费提醒。
 
-各角色的提示词均包含完整行为约定；受支持的宿主会接入对应的提醒链路。
+各角色的提示词均包含完整行为约定；可选的 hooks 会接入对应的提醒链路。
 
 ---
 
